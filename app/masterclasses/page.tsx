@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import Footer from "@/components/Footer";
+import NewsletterForm from "@/components/NewsletterForm";
 
 export default function MasterclassesPage() {
   return (
@@ -66,27 +67,7 @@ export default function MasterclassesPage() {
                 </p>
               </div>
 
-              {/* Responsive Form Inputs Row */}
-              <form className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="text"
-                  required
-                  placeholder="First and Last Name"
-                  className="flex-1 rounded bg-white px-4 py-2.5 text-[14px] text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:ring-2 focus:ring-amber-400"
-                />
-                <input
-                  type="email"
-                  required
-                  placeholder="Email"
-                  className="flex-1 rounded bg-white px-4 py-2.5 text-[14px] text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:ring-2 focus:ring-amber-400"
-                />
-                <button
-                  type="submit"
-                  className="rounded bg-[#fbbf24] hover:bg-[#f59e0b] px-6 py-2.5 text-[15px] font-bold text-black shadow-md transition-all duration-200 active:scale-95 shrink-0"
-                >
-                  Submit
-                </button>
-              </form>
+              <NewsletterForm />
             </div>
 
           </div>

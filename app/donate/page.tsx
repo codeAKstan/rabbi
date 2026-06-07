@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Footer from "@/components/Footer";
 
@@ -18,7 +18,10 @@ export default function DonatePage() {
   const [frequency, setFrequency] = useState<"once" | "monthly">("once");
   const [selectedPreset, setSelectedPreset] = useState<number | "custom">(36);
   const [customAmount, setCustomAmount] = useState<string>("");
-  
+
+  // Payment Type State
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto">("card");
+
   // Billing/Card States
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -35,8 +38,8 @@ export default function DonatePage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   // Determine actual amount being given
-  const activeAmount = selectedPreset === "custom" 
-    ? (Number(customAmount) || 0) 
+  const activeAmount = selectedPreset === "custom"
+    ? (Number(customAmount) || 0)
     : selectedPreset;
 
   // Custom Amount Dynamic Message generator
@@ -65,8 +68,20 @@ export default function DonatePage() {
 
   const currentPresetDetail = getPresetDetail();
 
-  // Simple validation & simulated submit
-  const handleDonate = (e: React.FormEvent) => {
+  // Check for successful redirect back from BTCPay Server
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("status") === "success") {
+        setIsSuccess(true);
+        // Clean up URL query parameters
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
+
+  // Simple validation & simulated submit or BTCPay invoice redirect
+  const handleDonate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -78,7 +93,7 @@ export default function DonatePage() {
       setErrorMessage("Please fill out your name and email address.");
       return;
     }
-    if (!cardNumber || !expiry || !cvc) {
+    if (paymentMethod === "card" && (!cardNumber || !expiry || !cvc)) {
       setErrorMessage("Please complete your card details for secure processing.");
       return;
     }
@@ -89,13 +104,44 @@ export default function DonatePage() {
 
     setIsSubmitting(true);
 
-    // Simulate Stripe API call
-    setTimeout(() => {
+    if (paymentMethod === "card") {
+      setErrorMessage("Credit Card payment is currently not available.");
       setIsSubmitting(false);
-      setIsSuccess(true);
-      // Scroll to top of form/page
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 2000);
+      return;
+    } else {
+      // BTCPay Server integration (Redirect Flow)
+      try {
+        const response = await fetch("/api/donate/btcpay", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            amount: activeAmount,
+            firstName,
+            lastName,
+            email,
+            frequency,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to create crypto invoice.");
+        }
+
+        if (data.checkoutLink) {
+          // Redirect the user to BTCPay Server payment page
+          window.location.href = data.checkoutLink;
+        } else {
+          throw new Error("BTCPay Server did not return a valid checkout link.");
+        }
+      } catch (err: any) {
+        console.error("Crypto payment checkout error:", err);
+        setErrorMessage(err.message || "An error occurred while launching crypto payment.");
+        setIsSubmitting(false);
+      }
+    }
   };
 
   // Card formatting helpers
@@ -125,7 +171,7 @@ export default function DonatePage() {
     <div className="min-h-screen flex flex-col justify-between bg-zinc-50 font-sans">
       <main className="flex-1 w-full py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-6 sm:px-8">
-          
+
           {/* Header Section */}
           <div className="text-center max-w-3xl mx-auto space-y-6 mb-16">
             <span className="text-[12px] font-bold tracking-widest text-[#d4af37] uppercase">
@@ -134,7 +180,7 @@ export default function DonatePage() {
             <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-[#002d62]">
               Support Rabbi Menachem
             </h1>
-            
+
             {/* Gold Separator */}
             <div className="flex items-center justify-center">
               <div className="h-[1px] bg-[#d4af37]/60 w-16" />
@@ -162,7 +208,7 @@ export default function DonatePage() {
               <h2 className="font-serif text-3xl font-bold text-[#002d62] mt-2 mb-4">
                 Thank You, {firstName}!
               </h2>
-              
+
               <div className="my-6 border-y border-zinc-100 py-6 text-left space-y-4 max-w-md mx-auto">
                 <div className="flex justify-between text-sm text-zinc-600">
                   <span>Sponsorship Type:</span>
@@ -171,6 +217,12 @@ export default function DonatePage() {
                 <div className="flex justify-between text-sm text-zinc-600">
                   <span>Amount:</span>
                   <span className="font-bold text-[#002d62] text-lg">${activeAmount.toFixed(2)} USD</span>
+                </div>
+                <div className="flex justify-between text-sm text-zinc-600">
+                  <span>Payment Method:</span>
+                  <span className="font-semibold text-zinc-900 capitalize">
+                    {paymentMethod === "crypto" ? "Bitcoin / Crypto" : "Credit Card"}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm text-zinc-600">
                   <span>Donor Email:</span>
@@ -220,10 +272,10 @@ export default function DonatePage() {
           ) : (
             /* Two Column Interactive Donation Page */
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 max-w-6xl mx-auto items-start">
-              
+
               {/* Left Column: The Interactive Form */}
               <div className="lg:col-span-7 bg-white rounded-2xl border border-zinc-200 shadow-xl p-6 sm:p-8 space-y-8">
-                
+
                 {/* Frequency Toggle */}
                 <div>
                   <label className="text-[13px] font-bold text-zinc-400 tracking-wider uppercase block mb-3">
@@ -233,22 +285,20 @@ export default function DonatePage() {
                     <button
                       type="button"
                       onClick={() => setFrequency("once")}
-                      className={`py-2.5 text-sm font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${
-                        frequency === "once"
+                      className={`py-2.5 text-sm font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${frequency === "once"
                           ? "bg-[#002d62] text-white shadow-md"
                           : "text-zinc-600 hover:text-zinc-900"
-                      }`}
+                        }`}
                     >
                       Give One-Time
                     </button>
                     <button
                       type="button"
                       onClick={() => setFrequency("monthly")}
-                      className={`py-2.5 text-sm font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${
-                        frequency === "monthly"
+                      className={`py-2.5 text-sm font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${frequency === "monthly"
                           ? "bg-[#002d62] text-white shadow-md"
                           : "text-zinc-600 hover:text-zinc-900"
-                      }`}
+                        }`}
                     >
                       Give Monthly
                     </button>
@@ -269,11 +319,10 @@ export default function DonatePage() {
                           setSelectedPreset(preset.amount);
                           setCustomAmount("");
                         }}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 hover:scale-[1.02] ${
-                          selectedPreset === preset.amount
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 hover:scale-[1.02] ${selectedPreset === preset.amount
                             ? "border-[#d4af37] bg-amber-50/20 ring-2 ring-[#d4af37]/30"
                             : "border-zinc-200 hover:border-zinc-300 bg-white"
-                        }`}
+                          }`}
                       >
                         <span className={`text-xl font-bold font-serif ${selectedPreset === preset.amount ? "text-[#002d62]" : "text-zinc-800"}`}>
                           {preset.label}
@@ -283,15 +332,14 @@ export default function DonatePage() {
                         </span>
                       </button>
                     ))}
-                    
+
                     <button
                       type="button"
                       onClick={() => setSelectedPreset("custom")}
-                      className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 hover:scale-[1.02] ${
-                        selectedPreset === "custom"
+                      className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 hover:scale-[1.02] ${selectedPreset === "custom"
                           ? "border-[#d4af37] bg-amber-50/20 ring-2 ring-[#d4af37]/30"
                           : "border-zinc-200 hover:border-zinc-300 bg-white"
-                      }`}
+                        }`}
                     >
                       <span className={`text-lg font-bold font-serif ${selectedPreset === "custom" ? "text-[#002d62]" : "text-zinc-800"}`}>
                         Custom
@@ -343,6 +391,35 @@ export default function DonatePage() {
                     2. Payment Information
                   </h3>
 
+                  {/* Payment Method Selector */}
+                  <div>
+                    <label className="text-[13px] font-bold text-zinc-400 tracking-wider uppercase block mb-3">
+                      Select Payment Method
+                    </label>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod("card")}
+                        className={`flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border font-bold text-sm tracking-wide transition-all duration-200 cursor-pointer ${paymentMethod === "card"
+                            ? "border-[#002d62] bg-[#002d62]/5 text-[#002d62] ring-2 ring-[#002d62]/10"
+                            : "border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 bg-white"
+                          }`}
+                      >
+                        <span className="text-base">💳</span> Credit Card
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod("crypto")}
+                        className={`flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border font-bold text-sm tracking-wide transition-all duration-200 cursor-pointer ${paymentMethod === "crypto"
+                            ? "border-[#d4af37] bg-amber-50/20 text-[#c89e2b] ring-2 ring-[#d4af37]/20"
+                            : "border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 bg-white"
+                          }`}
+                      >
+                        <span className="text-amber-500 font-serif text-base">₿</span> Bitcoin / Crypto
+                      </button>
+                    </div>
+                  </div>
+
                   {errorMessage && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm font-medium flex items-center gap-2">
                       <span>⚠️</span> {errorMessage}
@@ -391,83 +468,120 @@ export default function DonatePage() {
                     />
                   </div>
 
-                  {/* Credit Card Input Row */}
-                  <div className="space-y-3">
-                    <label className="text-[13px] font-bold text-zinc-700 flex items-center justify-between">
-                      <span>Card Details <span className="text-red-500">*</span></span>
-                      <span className="text-zinc-400 text-xs flex gap-1 items-center">
-                        🔒 SSL Encrypted Secure Checkout
-                      </span>
-                    </label>
+                  {/* Credit Card Inputs */}
+                  {paymentMethod === "card" && (
+                    <>
+                      {/* Credit Card Input Row */}
+                      <div className="space-y-3">
+                        <label className="text-[13px] font-bold text-zinc-700 flex items-center justify-between">
+                          <span>Card Details <span className="text-red-500">*</span></span>
+                          <span className="text-zinc-400 text-xs flex gap-1 items-center">
+                            🔒 SSL Encrypted Secure Checkout
+                          </span>
+                        </label>
 
-                    <div className="border border-zinc-300 rounded-lg overflow-hidden focus-within:border-[#002d62] focus-within:ring-1 focus-within:ring-[#002d62] bg-zinc-50/30 transition-all">
-                      {/* Card Number */}
-                      <div className="relative border-b border-zinc-200">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                          <span className="text-zinc-400 text-sm">💳</span>
+                        <div className="border border-zinc-300 rounded-lg overflow-hidden focus-within:border-[#002d62] focus-within:ring-1 focus-within:ring-[#002d62] bg-zinc-50/30 transition-all">
+                          {/* Card Number */}
+                          <div className="relative border-b border-zinc-200">
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                              <span className="text-zinc-400 text-sm">💳</span>
+                            </div>
+                            <input
+                              type="text"
+                              required
+                              value={cardNumber}
+                              onChange={handleCardNumberChange}
+                              placeholder="Card Number (XXXX XXXX XXXX XXXX)"
+                              className="w-full bg-transparent pl-10 pr-3 py-3 text-[15px] text-zinc-800 outline-none"
+                            />
+                          </div>
+
+                          {/* Expiry, CVC, Zip */}
+                          <div className="grid grid-cols-3 divide-x divide-zinc-200">
+                            <input
+                              type="text"
+                              required
+                              value={expiry}
+                              onChange={handleExpiryChange}
+                              placeholder="MM/YY"
+                              className="w-full bg-transparent px-3 py-3 text-[15px] text-zinc-800 outline-none text-center"
+                            />
+                            <input
+                              type="text"
+                              required
+                              value={cvc}
+                              onChange={handleCvcChange}
+                              placeholder="CVC"
+                              className="w-full bg-transparent px-3 py-3 text-[15px] text-zinc-800 outline-none text-center"
+                            />
+                            <input
+                              type="text"
+                              required
+                              value={billingZip}
+                              onChange={(e) => setBillingZip(e.target.value)}
+                              placeholder="Zip Code"
+                              className="w-full bg-transparent px-3 py-3 text-[15px] text-zinc-800 outline-none text-center"
+                            />
+                          </div>
                         </div>
-                        <input
-                          type="text"
-                          required
-                          value={cardNumber}
-                          onChange={handleCardNumberChange}
-                          placeholder="Card Number (XXXX XXXX XXXX XXXX)"
-                          className="w-full bg-transparent pl-10 pr-3 py-3 text-[15px] text-zinc-800 outline-none"
-                        />
                       </div>
 
-                      {/* Expiry, CVC, Zip */}
-                      <div className="grid grid-cols-3 divide-x divide-zinc-200">
-                        <input
-                          type="text"
-                          required
-                          value={expiry}
-                          onChange={handleExpiryChange}
-                          placeholder="MM/YY"
-                          className="w-full bg-transparent px-3 py-3 text-[15px] text-zinc-800 outline-none text-center"
-                        />
-                        <input
-                          type="text"
-                          required
-                          value={cvc}
-                          onChange={handleCvcChange}
-                          placeholder="CVC"
-                          className="w-full bg-transparent px-3 py-3 text-[15px] text-zinc-800 outline-none text-center"
-                        />
-                        <input
-                          type="text"
-                          required
-                          value={billingZip}
-                          onChange={(e) => setBillingZip(e.target.value)}
-                          placeholder="Zip Code"
-                          className="w-full bg-transparent px-3 py-3 text-[15px] text-zinc-800 outline-none text-center"
-                        />
+                      {/* Alternative Fast Payments Mocks */}
+                      <div className="pt-2">
+                        <span className="text-xs text-zinc-400 font-semibold tracking-wider uppercase block text-center mb-3">
+                          Or Give Securely Via
+                        </span>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => alert("PayPal is currently not available.")}
+                            className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 hover:border-zinc-400 bg-white py-2.5 text-sm font-semibold text-zinc-700 transition-colors cursor-pointer"
+                          >
+                            <span className="text-blue-600 font-bold">Pay</span><span className="text-cyan-500 font-bold">Pal</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => alert("Apple Pay is currently not available.")}
+                            className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 hover:border-zinc-400 bg-white py-2.5 text-sm font-semibold text-zinc-700 transition-colors cursor-pointer"
+                          >
+                            <span> Pay</span>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Cryptocurrency Information */}
+                  {paymentMethod === "crypto" && (
+                    <div className="p-6 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-4 animate-in fade-in duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-[#c89e2b] font-bold font-serif text-lg border border-amber-200 shadow-inner">
+                          ₿
+                        </div>
+                        <div>
+                          <h4 className="font-serif text-base font-bold text-[#002d62]">
+                            Crypto Payment
+                          </h4>
+
+                        </div>
+                      </div>
+
+                      {/* <p className="text-xs text-zinc-600 leading-relaxed font-light">
+                        We support **Bitcoin (BTC)** and **Lightning Network** payments directly. Upon clicking the button below, a secure checkout modal will open to complete your payment.
+                      </p> */}
+
+                      <div className="h-[1px] bg-zinc-200" />
+
+                      <div className="flex flex-wrap gap-2">
+                        <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-full text-[10px] font-bold text-zinc-500">
+                          ⚡ Lightning Network Enabled
+                        </span>
+                        <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-full text-[10px] font-bold text-zinc-500">
+                          🛡️ Peer-to-Peer Encryption
+                        </span>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Alternative Fast Payments Mocks */}
-                  <div className="pt-2">
-                    <span className="text-xs text-zinc-400 font-semibold tracking-wider uppercase block text-center mb-3">
-                      Or Give Securely Via
-                    </span>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => alert("Simulation: PayPal popup would open.")}
-                        className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 hover:border-zinc-400 bg-white py-2.5 text-sm font-semibold text-zinc-700 transition-colors"
-                      >
-                        <span className="text-blue-600 font-bold">Pay</span><span className="text-cyan-500 font-bold">Pal</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => alert("Simulation: Stripe GPay/ApplePay sheet would open.")}
-                        className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 hover:border-zinc-400 bg-white py-2.5 text-sm font-semibold text-zinc-700 transition-colors"
-                      >
-                        <span> Pay</span>
-                      </button>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Terms Acceptance */}
                   <label className="flex items-start gap-3 text-xs text-zinc-500 select-none cursor-pointer pt-2">
@@ -478,7 +592,7 @@ export default function DonatePage() {
                       className="mt-0.5 rounded border-zinc-300 text-[#002d62] focus:ring-[#002d62]"
                     />
                     <span>
-                      I authorize this charge to my card and agree to support Rabbi Menachem's blueprints. Recurring pledges can be cancelled anytime by contacting support.
+                      I authorize this charge and agree to support Rabbi Menachem's blueprints. Recurring pledges can be cancelled anytime by contacting support.
                     </span>
                   </label>
 
@@ -487,12 +601,14 @@ export default function DonatePage() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="flex w-full items-center justify-center rounded-full bg-[#a80f14] pl-6 pr-2 py-3 text-[16px] font-bold uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:bg-[#8e0b0f] hover:scale-[1.01] active:scale-[0.99] disabled:bg-zinc-400 disabled:scale-100 group"
+                      className="flex w-full items-center justify-center rounded-full bg-[#a80f14] pl-6 pr-2 py-3 text-[16px] font-bold uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:bg-[#8e0b0f] hover:scale-[1.01] active:scale-[0.99] disabled:bg-zinc-400 disabled:scale-100 group cursor-pointer"
                     >
-                      <span className="mx-auto">
-                        {isSubmitting 
-                          ? "Securing Transaction..." 
-                          : `CONFIRM ${frequency === "monthly" ? "MONTHLY" : "ONE-TIME"} DONATION OF $${activeAmount}`}
+                      <span className="mx-auto font-bold">
+                        {isSubmitting
+                          ? "Securing Transaction..."
+                          : paymentMethod === "crypto"
+                            ? `DONATE WITH BITCOIN / CRYPTO`
+                            : `CONFIRM ${frequency === "monthly" ? "MONTHLY" : "ONE-TIME"} DONATION OF $${activeAmount}`}
                       </span>
                       {!isSubmitting && (
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white shrink-0">
@@ -509,14 +625,14 @@ export default function DonatePage() {
 
               {/* Right Column: Quotes, Sponsorship Info, FAQ */}
               <div className="lg:col-span-5 space-y-8">
-                
+
                 {/* Tzedakah philosophy quote */}
                 <div className="bg-[#002d62] text-white rounded-2xl p-6 sm:p-8 shadow-xl border border-blue-900 relative overflow-hidden">
                   {/* Subtle Background Pattern */}
                   <div className="absolute top-0 right-0 p-8 text-blue-900 text-9xl opacity-20 font-serif pointer-events-none">
                     ◆
                   </div>
-                  
+
                   <h3 className="font-serif text-lg font-bold text-[#d4af37] uppercase tracking-wide mb-3 flex items-center gap-2">
                     <span>The Act of Tzedakah</span>
                   </h3>
@@ -534,7 +650,7 @@ export default function DonatePage() {
                   <h3 className="font-serif text-lg font-bold text-[#002d62] border-b border-zinc-100 pb-2">
                     Sponsorship Benefits
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div className="flex gap-3 items-start">
                       <span className="text-emerald-500 font-semibold text-lg">✓</span>
@@ -573,7 +689,7 @@ export default function DonatePage() {
                         Yes, donations are processed through our non-profit structural partner and are fully tax-deductible to the extent allowed by law. You will receive an official tax receipt via email.
                       </p>
                     </div>
-                    
+
                     <div className="space-y-1">
                       <h4 className="text-sm font-bold text-zinc-800">Can I modify or cancel my monthly pledge?</h4>
                       <p className="text-xs text-zinc-500 font-light leading-relaxed">

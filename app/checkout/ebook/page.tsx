@@ -48,7 +48,7 @@ function CheckoutContent() {
   const [loadingEbook, setLoadingEbook] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"stripe" | "crypto">("stripe");
   const [selectedCrypto, setSelectedCrypto] = useState<string>("btc");
-  
+
   // Billing details
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -71,12 +71,24 @@ function CheckoutContent() {
   const [errorMessage, setErrorMessage] = useState("");
   const [receiptId, setReceiptId] = useState("");
 
-  // Fetch ebook details on mount
+  // Fetch ebook details on mount & check for successful checkout redirect
   useEffect(() => {
     if (ebookId && ebookId !== "default") {
       fetchEbookDetails(ebookId);
     }
-  }, [ebookId]);
+
+    const status = searchParams.get("status");
+    const orderId = searchParams.get("orderId");
+    if (status === "success" && orderId) {
+      setPaymentMethod("crypto");
+      setReceiptId(orderId);
+      setIsSuccess(true);
+      // Clean up URL query parameters
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, document.title, `${window.location.pathname}?id=${ebookId}`);
+      }
+    }
+  }, [ebookId, searchParams]);
 
   const fetchEbookDetails = async (id: string) => {
     setLoadingEbook(true);
@@ -114,7 +126,7 @@ function CheckoutContent() {
     }
   };
 
-  const handleCheckoutSubmit = (e: React.FormEvent) => {
+  const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -128,23 +140,43 @@ function CheckoutContent() {
         setErrorMessage("Please complete your credit card billing details.");
         return;
       }
+      setIsSubmitting(true);
+      setErrorMessage("Credit Card payment is currently not available.");
+      setIsSubmitting(false);
+      return;
     } else {
-      // Mock crypto hash validation check
-      if (!txHashMock.trim()) {
-        setErrorMessage("Please enter your transaction signature/hash for blockchain verification.");
-        return;
+      setIsSubmitting(true);
+      // BTCPay Server redirect flow
+      try {
+        const response = await fetch("/api/checkout/btcpay", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ebookId,
+            firstName,
+            lastName,
+            email,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to create crypto invoice.");
+        }
+
+        if (data.checkoutLink) {
+          window.location.href = data.checkoutLink;
+        } else {
+          throw new Error("BTCPay Server did not return a valid checkout link.");
+        }
+      } catch (err: any) {
+        console.error("Crypto purchase error:", err);
+        setErrorMessage(err.message || "An error occurred while launching crypto payment.");
+        setIsSubmitting(false);
       }
     }
-
-    setIsSubmitting(true);
-
-    // Simulate payment processor delay
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setReceiptId(`REC-${Math.floor(10000000 + Math.random() * 90000000)}`);
-      setIsSuccess(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 2500);
   };
 
   // Card formatting helpers
@@ -259,12 +291,12 @@ function CheckoutContent() {
       ) : (
         /* TWO COLUMN CHECKOUT LAYOUT */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start max-w-6xl mx-auto">
-          
+
           {/* Left Column: Form billing/payment selection */}
           <div className="lg:col-span-7 bg-white rounded-2xl border border-zinc-200 shadow-xl p-6 sm:p-8 space-y-8">
-            
+
             <form onSubmit={handleCheckoutSubmit} className="space-y-8">
-              
+
               {/* Step 1: Customer Details */}
               <div className="space-y-4">
                 <h3 className="font-serif text-lg font-bold text-[#002d62] border-b border-zinc-100 pb-2">
@@ -336,11 +368,10 @@ function CheckoutContent() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("stripe")}
-                    className={`py-2 text-xs font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${
-                      paymentMethod === "stripe"
+                    className={`py-2 text-xs font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${paymentMethod === "stripe"
                         ? "bg-[#002d62] text-white shadow-md"
                         : "text-zinc-500 hover:text-zinc-800"
-                    }`}
+                      }`}
                     disabled={isSubmitting}
                   >
                     💳 Stripe / Card
@@ -348,11 +379,10 @@ function CheckoutContent() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("crypto")}
-                    className={`py-2 text-xs font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${
-                      paymentMethod === "crypto"
+                    className={`py-2 text-xs font-bold uppercase tracking-wider rounded-full transition-all duration-300 ${paymentMethod === "crypto"
                         ? "bg-[#002d62] text-white shadow-md"
                         : "text-zinc-500 hover:text-zinc-800"
-                    }`}
+                      }`}
                     disabled={isSubmitting}
                   >
                     🪙 Crypto Payment
@@ -434,96 +464,33 @@ function CheckoutContent() {
 
                 {/* TAB 2: CRYPTO VIEW */}
                 {paymentMethod === "crypto" && (
-                  <div className="space-y-6 animate-in fade-in duration-200">
-                    
-                    {/* Coin Selection */}
-                    <div className="space-y-1">
-                      <label className="text-[12px] font-bold text-zinc-700 block">
-                        Select Cryptocurrency
-                      </label>
-                      <select
-                        value={selectedCrypto}
-                        onChange={(e) => setSelectedCrypto(e.target.value)}
-                        className="w-full rounded border border-zinc-300 bg-zinc-50/30 px-3 py-2 text-[14px] text-zinc-800 outline-none focus:border-[#002d62] cursor-pointer"
-                        disabled={isSubmitting}
-                      >
-                        <option value="btc">Bitcoin (BTC)</option>
-                        <option value="eth">Ethereum (ETH)</option>
-                        <option value="sol">Solana (SOL)</option>
-                        <option value="usdc">USD Coin (USDC)</option>
-                      </select>
+                  <div className="p-6 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-[#c89e2b] font-bold font-serif text-lg border border-amber-200 shadow-inner">
+                        ₿
+                      </div>
+                      <div>
+                        <h4 className="font-serif text-base font-bold text-[#002d62]">
+                          Crypto Payment
+                        </h4>
+
+                      </div>
                     </div>
 
-                    {/* QR Code and Wallet Display Panel */}
-                    <div className="bg-zinc-50 p-6 rounded-2xl border border-zinc-200 flex flex-col md:flex-row gap-6 items-center">
-                      
-                      {/* CSS-based beautiful mockup QR code block */}
-                      <div className="h-28 w-28 border-2 border-zinc-300 p-2 bg-white rounded-lg flex items-center justify-center shrink-0 shadow-sm relative group select-none">
-                        <div className="absolute inset-2 border border-zinc-800 border-dashed opacity-30"></div>
-                        <div className="flex flex-col gap-1.5 items-center justify-center text-[10px] text-zinc-700 font-bold z-10">
-                          <span className="text-xl">▣</span>
-                          <span className="font-mono text-[9px] uppercase tracking-wider">{CRYPTO_CONFIG[selectedCrypto].symbol}</span>
-                          <span className="text-[8px] font-normal text-zinc-400">Scan QR</span>
-                        </div>
-                        <div className="absolute top-1.5 left-1.5 w-3 h-3 border-t-2 border-l-2 border-zinc-800"></div>
-                        <div className="absolute top-1.5 right-1.5 w-3 h-3 border-t-2 border-r-2 border-zinc-800"></div>
-                        <div className="absolute bottom-1.5 left-1.5 w-3 h-3 border-b-2 border-l-2 border-zinc-800"></div>
-                        <div className="absolute bottom-1.5 right-1.5 w-3 h-3 border-b-2 border-r-2 border-zinc-800"></div>
-                      </div>
+                    {/* <p className="text-xs text-zinc-600 leading-relaxed font-light">
+                      We support **Bitcoin (BTC)** and **Lightning Network** payments directly. Upon clicking the button below, you will be redirected to our secure self-hosted BTCPay Server page to complete your purchase.
+                    </p> */}
 
-                      {/* Convert Rate & Details */}
-                      <div className="space-y-3 w-full text-center md:text-left">
-                        <div>
-                          <p className="text-xs text-zinc-400 font-light">Send exact amount:</p>
-                          <p className="text-xl font-bold text-[#002d62] font-mono">
-                            {getCryptoAmount()} {CRYPTO_CONFIG[selectedCrypto].symbol}
-                          </p>
-                          <p className="text-[10px] text-zinc-400 font-light mt-0.5">
-                            (Equivalent to ${Number(ebook.price).toFixed(2)} USD)
-                          </p>
-                        </div>
+                    <div className="h-[1px] bg-zinc-200" />
 
-                        {/* Copy Wallet */}
-                        <div className="space-y-1.5">
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
-                            Receiver Address
-                          </p>
-                          <div className="flex items-center gap-2 max-w-xs mx-auto md:mx-0">
-                            <span className="font-mono text-[11px] text-zinc-500 bg-white px-2.5 py-1 border border-zinc-200 rounded truncate flex-1 block">
-                              {CRYPTO_CONFIG[selectedCrypto].address}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={handleCopyAddress}
-                              className="px-3 py-1 border border-zinc-200 hover:bg-zinc-100 rounded text-[10px] font-bold text-zinc-700 bg-white transition-colors shrink-0"
-                            >
-                              {copied ? "Copied!" : "Copy"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Transaction Verification Input */}
-                    <div className="space-y-1">
-                      <label className="text-[12px] font-bold text-zinc-700 block">
-                        Blockchain Tx Hash / Signature <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required={paymentMethod === "crypto"}
-                        placeholder="Enter transaction signature to verify..."
-                        value={txHashMock}
-                        onChange={(e) => setTxHashMock(e.target.value)}
-                        className="w-full rounded border border-zinc-300 bg-zinc-50/30 px-3 py-2.5 text-xs font-mono text-zinc-800 outline-none focus:border-[#002d62]"
-                        disabled={isSubmitting}
-                      />
-                      <span className="text-[10px] text-zinc-400 block font-light">
-                        Confirm payments immediately by pasting the transaction reference signature above.
+                    <div className="flex flex-wrap gap-2">
+                      <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-full text-[10px] font-bold text-zinc-500">
+                        ⚡ Lightning Network Enabled
+                      </span>
+                      <span className="px-2.5 py-1 bg-white border border-zinc-200 rounded-full text-[10px] font-bold text-zinc-500">
+                        🛡️ Peer-to-Peer Encryption
                       </span>
                     </div>
-
                   </div>
                 )}
 
@@ -537,10 +504,10 @@ function CheckoutContent() {
                   className="flex w-full items-center justify-center rounded-full bg-[#a80f14] pl-6 pr-2 py-3 text-[16px] font-bold uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:bg-[#8e0b0f] hover:scale-[1.01] active:scale-[0.99] disabled:bg-zinc-400 disabled:scale-100 group"
                 >
                   <span className="mx-auto">
-                    {isSubmitting 
-                      ? (paymentMethod === "stripe" 
-                          ? "Authorizing Card..." 
-                          : "Verifying Blockchain Record...") 
+                    {isSubmitting
+                      ? (paymentMethod === "stripe"
+                        ? "Authorizing Card..."
+                        : "Verifying Blockchain Record...")
                       : `COMPLETE PURCHASE - $${Number(ebook.price).toFixed(2)}`}
                   </span>
                   {!isSubmitting && (
@@ -557,7 +524,7 @@ function CheckoutContent() {
           {/* Right Column: Order Summary details */}
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-white rounded-2xl border border-zinc-200 shadow-lg p-6 space-y-6">
-              
+
               <h3 className="font-serif text-lg font-bold text-[#002d62] border-b border-zinc-100 pb-2">
                 Order Summary
               </h3>

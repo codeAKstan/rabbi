@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import Footer from "@/components/Footer";
+import ContactForm from "@/components/ContactForm";
 
 export default function Home() {
   return (
@@ -119,65 +120,7 @@ export default function Home() {
             or use the contact form below.
           </p>
 
-          <form className="w-full mt-12 space-y-6">
-            {/* Name Fields */}
-            <div className="space-y-2">
-              <label className="text-[15px] font-bold text-zinc-800 flex items-center">
-                Name <span className="text-red-500 ml-1">*</span>
-              </label>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <input
-                    type="text"
-                    required
-                    className="w-full rounded border border-zinc-300 bg-zinc-50/30 px-3 py-2 text-[15px] text-zinc-800 outline-none transition-all focus:border-[#002d62] focus:ring-1 focus:ring-[#002d62]"
-                  />
-                  <span className="text-[12px] text-zinc-500 block">First</span>
-                </div>
-                <div className="space-y-1">
-                  <input
-                    type="text"
-                    required
-                    className="w-full rounded border border-zinc-300 bg-zinc-50/30 px-3 py-2 text-[15px] text-zinc-800 outline-none transition-all focus:border-[#002d62] focus:ring-1 focus:ring-[#002d62]"
-                  />
-                  <span className="text-[12px] text-zinc-500 block">Last</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Email Field */}
-            <div className="space-y-1">
-              <label className="text-[15px] font-bold text-zinc-800 flex items-center">
-                Email <span className="text-red-500 ml-1">*</span>
-              </label>
-              <input
-                type="email"
-                required
-                className="w-full rounded border border-zinc-300 bg-zinc-50/30 px-3 py-2 text-[15px] text-zinc-800 outline-none transition-all focus:border-[#002d62] focus:ring-1 focus:ring-[#002d62]"
-              />
-            </div>
-
-            {/* Comment or Message */}
-            <div className="space-y-1">
-              <label className="text-[15px] font-bold text-zinc-800 block">
-                Comment or Message
-              </label>
-              <textarea
-                rows={6}
-                className="w-full rounded border border-zinc-300 bg-zinc-50/30 px-3 py-2 text-[15px] text-zinc-800 outline-none transition-all focus:border-[#002d62] focus:ring-1 focus:ring-[#002d62] resize-y"
-              />
-            </div>
-
-            {/* Submit Button */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                className="rounded-md bg-zinc-100 border border-zinc-300 hover:bg-zinc-200 px-6 py-2.5 text-[14px] font-medium text-zinc-700 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-              >
-                Submit
-              </button>
-            </div>
-          </form>
+          <ContactForm />
         </div>
       </section>
 

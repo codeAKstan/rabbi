@@ -425,9 +425,7 @@ export default function AdminPage() {
                 <span className="text-2xl sm:text-3xl font-bold font-serif text-[#002d62]">
                   ${stats.totalDonations.toLocaleString()}
                 </span>
-                <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 self-start px-2 py-0.5 rounded">
-                  ▲ +18.4%
-                </span>
+                <div className="h-6" /> {/* Placeholder for alignment */}
                 <span className="absolute right-4 bottom-2 text-6xl text-zinc-50 font-bold select-none pointer-events-none">
                   $
                 </span>
@@ -441,9 +439,7 @@ export default function AdminPage() {
                 <span className="text-2xl sm:text-3xl font-bold font-serif text-[#002d62]">
                   {stats.activeMemberships}
                 </span>
-                <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 self-start px-2 py-0.5 rounded">
-                  ▲ +12 new
-                </span>
+                <div className="h-6" />
                 <span className="absolute right-4 bottom-2 text-6xl text-zinc-50 font-bold select-none pointer-events-none">
                   ☺
                 </span>
@@ -457,9 +453,7 @@ export default function AdminPage() {
                 <span className="text-2xl sm:text-3xl font-bold font-serif text-[#002d62]">
                   {stats.ebookDownloads}
                 </span>
-                <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 self-start px-2 py-0.5 rounded">
-                  ▲ +48 this mo
-                </span>
+                <div className="h-6" />
                 <span className="absolute right-4 bottom-2 text-6xl text-zinc-50 font-bold select-none pointer-events-none">
                   📖
                 </span>
@@ -473,9 +467,15 @@ export default function AdminPage() {
                 <span className="text-2xl sm:text-3xl font-bold font-serif text-[#002d62]">
                   {stats.pendingInquiries}
                 </span>
-                <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 self-start px-2 py-0.5 rounded">
-                  ● Pending Reply
-                </span>
+                {stats.pendingInquiries > 0 ? (
+                  <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 self-start px-2 py-0.5 rounded">
+                    ● Pending Reply
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 self-start px-2 py-0.5 rounded">
+                    ✓ All Answered
+                  </span>
+                )}
                 <span className="absolute right-4 bottom-2 text-6xl text-zinc-50 font-bold select-none pointer-events-none">
                   ✉
                 </span>
@@ -583,9 +583,19 @@ export default function AdminPage() {
                             ${don.amount.toFixed(2)}
                           </td>
                           <td className="px-6 py-4">
-                            <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-100">
-                              Completed
-                            </span>
+                            {don.status === "settled" || don.status === "completed" ? (
+                              <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-100">
+                                Completed
+                              </span>
+                            ) : don.status === "pending" ? (
+                              <span className="bg-amber-50 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-100 animate-pulse">
+                                Pending
+                              </span>
+                            ) : (
+                              <span className="bg-zinc-100 text-zinc-500 text-[10px] font-bold px-2 py-0.5 rounded-full border border-zinc-200">
+                                Expired
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-right text-zinc-500 font-light">
                             {don.date}
